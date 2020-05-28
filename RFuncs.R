@@ -144,7 +144,7 @@ wbugs <-function(data,initsl,prm,mfn,prm.del.conv,
 		print(paste0('Iteration: ',tryi*(niter-nburnin)))
 		fit.coda = read.openbugs(stem="",thin = nthin,quiet=T)
 		del.id = na.omit(match(c('ppp',prm.conv),varnames(fit.coda)))
-		print(summary(fit.coda),3)
+		#print(summary(fit.coda),3)
 		if(diagm=='Geweke'){
 			if(length(del.id)>0){
 				tmp.conv = geweke.diag(fit.coda[,-del.id])[[1]]$z
