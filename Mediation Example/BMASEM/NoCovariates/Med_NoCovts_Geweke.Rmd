@@ -1,0 +1,111 @@
+---
+title: "Mediation_BMASEM_NoCovariate_Geweke"
+author: "Zijun Ke"
+date: "2020/5/28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load packages and functions
+```{r}
+library(matrixcalc)
+library(MASS)
+library(coda)
+library(Matrix)
+library(R2OpenBUGS)
+library(xlsx)
+#source('https://github.com/zijunke/HeterogeneityMASEM/blob/master/RFuncs.R')
+source('D:/Research/WorkStation/HeteroRD2/RFuncs.R')
+```
+
+# Set working directory
+```{r}
+wd = 'D:/Research/WorkStation/HeteroRD2/MED/NoCovariate_Geweke/'
+setwd(wd)
+```
+
+
+# Read in data
+```{r}
+#dat = read.xlsx('https://github.com/zijunke/HeterogeneityMASEM/blob/master/Mediation%20Example/data3.xlsx',1) 
+dat = read.xlsx('D:/Research/WorkStation/HeteroRD2/Github/Mediation Example/data3.xlsx',1)
+head(dat)
+```
+
+# Data cleaning
+```{r}
+# remove multiple correlations from the same study
+sid = dat[,'study']
+sel.id = (duplicated(sid)==0)
+dat = dat[sel.id,]
+summary(dat)
+```
+
+# Data preparation for BMASEM
+```{r}
+vR = as.matrix(dat[,c('rXM','rXY','rMY')]) # bivariate correlations
+N	 = dat[,'N'] # individual study sample sizes
+Nstudy	= nrow(dat) # number of studies
+mu.N	= mean(N) # mean sample size per study
+
+# Coordinations (matrix <-> vector)
+p	= 3 # number of observed variables
+pp 	= p*(p-1)/2 # number of bivariate correlations
+index.list = jkvil(p)
+j = index.list$j
+k = index.list$k
+vil = index.list$vil
+
+# Sampling covariance (precision) matrix of the observed correlation vectors 
+vR.bar = apply(vR,2,mean,na.rm = TRUE)
+vR.impute = Mimpute(vR,N,'MCAR')
+Stau.vR <- Vj(vR.bar,N,pp,Nstudy,index.list)
+tau.vR <- Stau.vR$tau.vR; 
+
+# Hyperparameters for priors (additional error term)
+I3 = diag(1,3); u0 = rep(0,3);mu.vR.psi = rep(0,pp)
+df.prelim = 2*pp
+alpha.prior.vE = (df.prelim-pp+1)/2
+beta.prior.vE = alpha.prior.vE*(0.3*(1-max(vR,na.rm=T)^2)^2/mu.N)
+
+# Name list of the data for BMASEM
+data<-list("Nstudy","N","mu.N",'p',"pp","vR","tau.vR","mu.vR.psi",
+	'alpha.prior.vE','beta.prior.vE','u0','I3')
+```
+
+# Initials values
+```{r}
+vR.inits = vR.impute; vR.inits[which(is.na(vR)==0,arr.ind = TRUE)] = NA
+initsl <- list(list(mu.a=0,mu.b=0,mu.cp=0,tau.u=diag(100,3),xi=rep(1,3),tau.R = mu.N*2,
+	vR.psi = matrix(0,Nstudy,pp),vR = vR.inits)) 
+```
+
+# Parameters to save
+```{r}
+prm = c('mu.a','mu.b','mu.cp','mu.ab','sd.a','sd.b','sd.cp','sd.ab',
+	'rho.ab','rho.acp','rho.bcp')
+```
+
+# Filename of the likelihood model and prior
+```{r}
+#model.fn = 'https://github.com/zijunke/HeterogeneityMASEM/blob/master/Mediation%20Example/Mediation_Random.txt'
+model.fn = 'D:/Research/WorkStation/HeteroRD2/Github/Mediation Example/Mediation_Random.txt'
+```
+
+# Model fitting using BMASEM
+```{r}
+fit = wbugs(data,initsl,prm,model.fn,NULL,
+		nchains=1,niter=60000,nburnin=30000,nthin=1,wd,diagm='Geweke')
+fit[-7]
+```
+
+# 80% Credibility intervals
+```{r}
+mu.n = paste0('mu.',c('a','b','cp','ab'))
+sd.n = paste0('sd.',c('a','b','cp','ab'))
+fit$est[mu.n]-qnorm(.9)*fit$est[sd.n]
+fit$est[mu.n]+qnorm(.9)*fit$est[sd.n]
+```
