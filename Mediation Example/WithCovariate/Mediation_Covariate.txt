@@ -1,0 +1,40 @@
+model{
+  for(si in 1:Nstudy){	
+    tau.ER[si]<-tau.R*N[si]/mu.N
+    vR.psi[si,1:pp]~dmnorm(mu.vR.psi[1:pp],tau.vR[si,1:pp,1:pp])
+
+    for(vi in 1:pp){
+      vR[si,vi]~dnorm(vPPsi[si,vi],tau.ER[si])
+      vPPsi[si,vi]<-vP[si,vi]+vR.psi[si,vi]
+    }
+
+    vP[si,1]<-a[si]
+    vP[si,2]<-c[si]
+    vP[si,3]<-a[si]*c[si]+b0.b*(1-a[si]*a[si])
+    c[si]<-a[si]*b0.b+cp[si]
+
+    mu.a[si]<-b0.a+b1.a*M[si]
+    mu.cp[si]<-b0.cp+b1.cp*M[si]
+    a[si]~dnorm(mu.a[si],tau.ua)
+    cp[si]~dnorm(mu.cp[si],tau.ucp)
+  }
+
+  # transformed parameters
+  tau.ua <- 1/sd.ua/sd.ua
+  tau.ucp <- 1/sd.ucp/sd.ucp
+  for(li in 1:3){
+    cphat[li]<-b0.cp+b1.cp*predM[li]
+  }
+
+  # prior
+  b0.a ~ dnorm(0,0.0001)
+  b0.b ~ dnorm(0,0.0001)
+  b0.cp ~ dnorm(0,0.0001)
+  b1.a ~ dnorm(0,0.0001)
+  b1.cp ~ dnorm(0,0.0001)
+  sd.ua ~ dgamma(2,.0001)
+  sd.ucp ~ dgamma(2,.0001)
+  tau.R ~dgamma(alpha.prior.vE,beta.prior.vE)
+}
+
+
