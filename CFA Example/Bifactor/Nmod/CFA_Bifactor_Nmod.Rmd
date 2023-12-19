@@ -1,0 +1,90 @@
+---
+title: "CFA_Bifactor_NoCovariate"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: yes
+    toc_depth: 4
+    number_sections: yes
+  html_document: default
+  word_document:
+    toc: yes
+    toc_depth: '4'
+    number_sections: yes
+---
+
+```{r setup, include=FALSE, echo = F}
+require("knitr")
+#knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_knit$set(root.dir = getwd())
+opts_knit$set(root.dir = 'D:/Research/2023/CompareMASEM/CFA/Bifactor/Nmod/')
+```
+
+# Load packages & set working directory & read in data
+```{r}
+library(metaSEM)
+
+# Working directory
+wd = 'D:/Research/2023/CompareMASEM/CFA/Bifactor/Nmod/'
+setwd(wd)
+```
+
+# OSMASEM
+## Data preparation
+```{r}
+# Modified based on the code from Jak & Cheung (2019) 
+## Exclude studies with missing values on Individualism
+index_na <- is.na(Gnambs18$Individualism)
+Gnambs18 <- lapply(Gnambs18, function(x) x[!index_na])
+
+# Exclude studies that reported CFA results only
+index <- Gnambs18$CorMat==1
+Gnambs18 <- lapply(Gnambs18, function(x) x[index])
+
+## Create a dataframe with the data and the asymptotic variances and covariances (acov)
+my.df <- Cor2DataFrame(Gnambs18$data, Gnambs18$n, acov = "weighted")
+
+## Add the standardized individualism as the moderator
+## Standardization of the moderator improves the convergence.
+Z1 = scale(Gnambs18$Individualism)
+Z2 = scale(1/sqrt(Gnambs18$n))
+my.df$data <- data.frame(my.df$data,Individualism=Z1, 
+	lN=Z2,Int = Z1*Z2,check.names=FALSE)
+summary(my.df)
+```
+
+## Model fitting
+```{r}
+## Specify the bifactor model
+model0 <- "G =~  g1*I1 + g2*I2 + g3*I3 + g4*I4 + g5*I5 + 
+                 g6*I6 + g7*I7 + g8*I8 + g9*I9 + g10*I10
+          POS =~ p1*I1 + p3*I3 + p4*I4 + p7*I7 + p10*I10
+          NEG =~ n2*I2 + n5*I5 + n6*I6 + n8*I8 + n9*I9"
+RAM0 <- lavaan2RAM(model0, obs.variables = paste0("I", 1:10),std.lv = TRUE)
+
+## Create heterogeneity variances
+T0 <- create.Tau2(RAM=RAM0, RE.type="Diag", Transform="expLog", RE.startvalues=0.05)
+
+## Create the A1 matrix with moderator effects of "Individualism"
+Ax1 <- RAM0$A
+Ax1[grep("\\*", Ax1)] <- "0*data.Individualism"
+Ax1
+
+## Create the A2 matrix with moderator effects of "Sample size"
+Ax2 <- RAM0$A
+Ax2[grep("\\*", Ax2)] <- "0*data.lN"
+Ax2
+
+## Create the A2 matrix with moderator effects of "Interaction"
+Ax3 <- RAM0$A
+Ax3[grep("\\*", Ax3)] <- "0*data.Int"
+Ax3
+
+## Create matrices with implicit diagonal constraints
+M1 <- create.vechsR(A0=RAM0$A, S0=RAM0$S, F0=RAM0$F, Ax=list(Ax1,Ax2,Ax3))
+
+## Fit the bifactor model with One-Stage MASEM
+fit1 <- osmasem(model.name="Moderator Analysis", Mmatrix=M1, 
+                Tmatrix=T0, data=my.df)
+summary(fit1, fitIndices= T)
+```
